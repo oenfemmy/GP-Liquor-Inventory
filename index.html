@@ -467,6 +467,28 @@
   @media (max-width: 600px) {
     .summary-grid { grid-template-columns: repeat(2,1fr); }
   }
+
+  .partial-opt {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 14px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    cursor: pointer;
+    font-size: 0.82rem;
+    color: var(--cream);
+    transition: all 0.15s;
+    user-select: none;
+  }
+  .partial-opt:has(input:checked) {
+    background: var(--gold);
+    border-color: var(--gold);
+    color: #fff;
+    font-weight: 500;
+  }
+  .partial-opt input[type="radio"] { display: none; }
 </style>
 </head>
 <body>
@@ -504,10 +526,9 @@
       <option>Cigarette</option>
     </select>
     <select id="stockFilter" onchange="renderTable()">
-      <option value="">All Stock Levels</option>
-      <option value="zero">Out of Stock</option>
-      <option value="low">Low (1–2)</option>
-      <option value="ok">In Stock (3+)</option>
+      <option value="">All Stock Status</option>
+      <option value="instock">✅ In Stock</option>
+      <option value="zero">❌ Out of Stock</option>
     </select>
     <select id="sortField" onchange="renderTable()">
       <option value="no">Sort: #</option>
@@ -570,12 +591,21 @@
       </div>
       <div class="form-grid">
         <div class="form-row">
-          <label>Quantity</label>
-          <input type="number" id="fQty" placeholder="0" min="0" step="1">
+          <label>Quantity (Whole Bottles)</label>
+          <input type="number" id="fQty" placeholder="0" min="0" step="1" value="0">
         </div>
         <div class="form-row">
           <label>Price / Bottle (IDR)</label>
           <input type="number" id="fPrice" placeholder="0" min="0" step="1000">
+        </div>
+      </div>
+      <div class="form-row">
+        <label>Partial / Open Bottle</label>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <label class="partial-opt"><input type="radio" name="fPartial" value="0" checked> <span>None</span></label>
+          <label class="partial-opt"><input type="radio" name="fPartial" value="0.25"> <span>¼ bottle</span></label>
+          <label class="partial-opt"><input type="radio" name="fPartial" value="0.5"> <span>½ bottle</span></label>
+          <label class="partial-opt"><input type="radio" name="fPartial" value="0.75"> <span>¾ bottle</span></label>
         </div>
       </div>
 
@@ -708,8 +738,8 @@ function renderSummary() {
   const grid = document.getElementById('summaryGrid');
   grid.innerHTML = categories.map(c => {
     const items = inventory.filter(i => i.type === c.key);
-    const totalQty = items.reduce((s,i) => s + Math.max(0, i.qty), 0);
-    const outOfStock = items.filter(i => i.qty <= 0).length;
+    const totalQty = items.reduce((s,i) => s + Math.max(0, qtyValue(i.qty, i.partial)), 0);
+    const outOfStock = items.filter(i => qtyValue(i.qty, i.partial) <= 0).length;
     const active = filterType === c.key;
     return `<div class="summary-card ${c.cls} ${active?'active':''}" onclick="toggleFilter('${c.key}')">
       <div class="label">${c.label}</div>
@@ -731,10 +761,30 @@ const pillClass = {
   "Red Wine":"pill-red","White Wine":"pill-white","Whisky":"pill-whisky",
   "Sake":"pill-sake","Champagne":"pill-champagne","Baijiu":"pill-baijiu","Cigarette":"pill-cigarette"
 };
-function qtyClass(q) {
-  if(q <= 0) return 'qty-zero';
-  if(q <= 2) return 'qty-low';
-  if(q <= 5) return 'qty-ok';
+// Returns total numeric value: whole + partial fraction
+function qtyValue(qty, partial) {
+  const w = parseFloat(qty) || 0;
+  const p = parseFloat(partial) || 0;
+  return w + p;
+}
+
+const PARTIAL_LABEL = { 0:'', 0.25:'¼', 0.5:'½', 0.75:'¾' };
+
+function fmtQty(qty, partial) {
+  const w = parseInt(qty) || 0;
+  const p = parseFloat(partial) || 0;
+  const pLabel = PARTIAL_LABEL[p] || '';
+  if(w === 0 && p === 0) return '0';
+  if(w === 0 && p > 0) return pLabel;
+  if(p > 0) return w + ' + ' + pLabel;
+  return String(w);
+}
+
+function qtyClass(qty, partial) {
+  const v = qtyValue(qty, partial);
+  if(v <= 0) return 'qty-zero';
+  if(v <= 2) return 'qty-low';
+  if(v <= 5) return 'qty-ok';
   return 'qty-good';
 }
 function fmtPrice(p) {
@@ -755,9 +805,8 @@ function getFiltered() {
   filterStock = document.getElementById('stockFilter').value;
   let list = [...inventory];
   if(filterType) list = list.filter(i => i.type === filterType);
-  if(filterStock === 'zero') list = list.filter(i => i.qty <= 0);
-  else if(filterStock === 'low') list = list.filter(i => i.qty > 0 && i.qty <= 2);
-  else if(filterStock === 'ok') list = list.filter(i => i.qty >= 3);
+  if(filterStock === 'zero') list = list.filter(i => qtyValue(i.qty, i.partial) <= 0);
+  else if(filterStock === 'instock') list = list.filter(i => qtyValue(i.qty, i.partial) > 0);
   if(searchQ) list = list.filter(i =>
     i.item.toLowerCase().includes(searchQ) ||
     i.type.toLowerCase().includes(searchQ) ||
@@ -789,7 +838,7 @@ function renderTable() {
         <td style="color:var(--muted);font-size:0.78rem">${item.no}</td>
         <td class="type-cell"><span class="type-pill ${pillClass[item.type]||''}">${item.type}</span></td>
         <td class="item-name">${item.item}</td>
-        <td class="qty-cell ${qtyClass(item.qty)}">${item.qty <= 0 ? '0' : item.qty}</td>
+        <td class="qty-cell ${qtyClass(item.qty, item.partial)}">${fmtQty(item.qty, item.partial)}</td>
         <td class="price-cell">${fmtPrice(item.price)}</td>
         <td class="remark-cell">${item.remarks||'—'}</td>
         <td class="action-cell">
@@ -799,13 +848,13 @@ function renderTable() {
       </tr>`;
     }).join('');
   }
-  const totalQty = inventory.reduce((s,i) => s + Math.max(0,i.qty),0);
+  const totalQty = inventory.reduce((s,i) => s + Math.max(0, qtyValue(i.qty, i.partial)), 0);
   const totalValue = inventory.filter(i=>i.price&&i.qty>0).reduce((s,i)=>s+i.price*i.qty,0);
   document.getElementById('countBadge').textContent = `${list.length} of ${inventory.length} items`;
   document.getElementById('footerStats').innerHTML = `
     <span>Total items: <strong>${inventory.length}</strong></span>
     <span>Total bottles: <strong>${totalQty}</strong></span>
-    <span>Out of stock: <strong style="color:var(--danger)">${inventory.filter(i=>i.qty<=0).length}</strong></span>
+    <span>Out of stock: <strong style="color:var(--danger)">${inventory.filter(i=>qtyValue(i.qty,i.partial)<=0).length}</strong></span>
     ${totalValue ? `<span>Est. value (priced items): <strong>IDR ${totalValue.toLocaleString('id-ID')}</strong></span>` : ''}
     <span style="margin-left:auto;font-size:0.7rem">Last updated: ${new Date().toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'})}</span>
   `;
@@ -824,6 +873,9 @@ function openModal(idx) {
   document.getElementById('fRemarks').value = '';
   document.getElementById('mvAmount').value = '';
   document.getElementById('mvNote').value = '';
+  // reset partial
+  const pr = document.querySelector('input[name="fPartial"][value="0"]');
+  if(pr) pr.checked = true;
   renderMovements();
   document.getElementById('movementSection').style.display = 'none';
   document.getElementById('modalOverlay').classList.add('open');
@@ -843,6 +895,10 @@ function openEdit(idx) {
   document.getElementById('mvAmount').value = '';
   document.getElementById('mvNote').value = '';
   document.getElementById('movementSection').style.display = 'block';
+  // restore partial
+  const pVal = item.partial || 0;
+  const pRadio = document.querySelector(`input[name="fPartial"][value="${pVal}"]`);
+  if(pRadio) pRadio.checked = true;
   renderMovements();
   document.getElementById('modalOverlay').classList.add('open');
 }
