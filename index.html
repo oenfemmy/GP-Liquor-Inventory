@@ -468,27 +468,42 @@
     .summary-grid { grid-template-columns: repeat(2,1fr); }
   }
 
-  .partial-opt {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 7px 14px;
-    background: var(--bg);
-    border: 1px solid var(--border);
-    border-radius: 20px;
-    cursor: pointer;
-    font-size: 0.82rem;
-    color: var(--cream);
-    transition: all 0.15s;
-    user-select: none;
+  /* ── QTY ENTRIES ── */
+  .qty-entries { display:flex; flex-direction:column; gap:6px; margin-bottom:10px; }
+  .qty-entry-row {
+    display:flex; align-items:center; gap:8px;
+    background:var(--bg); border:1px solid var(--border);
+    border-radius:4px; padding:7px 10px;
   }
-  .partial-opt:has(input:checked) {
-    background: var(--gold);
-    border-color: var(--gold);
-    color: #fff;
-    font-weight: 500;
+  .qty-entry-row select {
+    flex:1; background:transparent; border:none; padding:0;
+    font-size:0.88rem; color:var(--cream); font-family:'Jost',sans-serif;
+    outline:none; cursor:pointer;
   }
-  .partial-opt input[type="radio"] { display: none; }
+  .qty-entry-row .entry-note {
+    font-size:0.75rem; color:var(--muted); font-style:italic; flex:1;
+  }
+  .qty-entry-del {
+    background:none; border:none; color:var(--muted);
+    cursor:pointer; font-size:13px; padding:0 2px;
+    transition:color 0.15s;
+  }
+  .qty-entry-del:hover { color:var(--danger); }
+  .qty-add-row {
+    display:flex; gap:8px; align-items:center; margin-top:4px;
+  }
+  .qty-add-row select {
+    flex:1; background:var(--bg); border:1px solid var(--border);
+    border-radius:4px; padding:8px 10px; color:var(--cream);
+    font-family:'Jost',sans-serif; font-size:0.85rem; outline:none; cursor:pointer;
+  }
+  .qty-total-badge {
+    margin-top:8px; font-size:0.78rem; color:var(--muted);
+    padding:5px 10px; background:var(--surface); border-radius:4px;
+    border:1px solid var(--border);
+  }
+  .qty-total-badge strong { color:var(--gold); }
+
 </style>
 </head>
 <body>
@@ -589,24 +604,23 @@
         <label>Item Name</label>
         <input type="text" id="fItem" placeholder="e.g. 2019, Louis Jadot Corton Grand Cru">
       </div>
-      <div class="form-grid">
-        <div class="form-row">
-          <label>Quantity (Whole Bottles)</label>
-          <input type="number" id="fQty" placeholder="0" min="0" step="1" value="0">
+      <div class="form-row">
+        <label>Quantity</label>
+        <div class="qty-entries" id="qtyEntries"></div>
+        <div class="qty-add-row">
+          <select id="qtyAddSelect">
+            <option value="1">1 — Full bottle</option>
+            <option value="0.75">3/4 — Three-quarter bottle</option>
+            <option value="0.5">1/2 — Half bottle</option>
+            <option value="0.25">1/4 — Quarter bottle</option>
+          </select>
+          <button class="btn btn-outline" style="padding:7px 14px;font-size:0.75rem;white-space:nowrap;" onclick="addQtyEntry()">+ Add</button>
         </div>
-        <div class="form-row">
-          <label>Price / Bottle (IDR)</label>
-          <input type="number" id="fPrice" placeholder="0" min="0" step="1000">
-        </div>
+        <div class="qty-total-badge" id="qtyTotalBadge">Total: <strong>0 bottles</strong></div>
       </div>
       <div class="form-row">
-        <label>Partial / Open Bottle</label>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;">
-          <label class="partial-opt"><input type="radio" name="fPartial" value="0" checked> <span>None</span></label>
-          <label class="partial-opt"><input type="radio" name="fPartial" value="0.25"> <span>¼ bottle</span></label>
-          <label class="partial-opt"><input type="radio" name="fPartial" value="0.5"> <span>½ bottle</span></label>
-          <label class="partial-opt"><input type="radio" name="fPartial" value="0.75"> <span>¾ bottle</span></label>
-        </div>
+        <label>Price / Bottle (IDR)</label>
+        <input type="number" id="fPrice" placeholder="0" min="0" step="1000">
       </div>
 
       <div class="movement-section" id="movementSection">
@@ -738,8 +752,8 @@ function renderSummary() {
   const grid = document.getElementById('summaryGrid');
   grid.innerHTML = categories.map(c => {
     const items = inventory.filter(i => i.type === c.key);
-    const totalQty = items.reduce((s,i) => s + Math.max(0, qtyValue(i.qty, i.partial)), 0);
-    const outOfStock = items.filter(i => qtyValue(i.qty, i.partial) <= 0).length;
+    const totalQty = items.reduce((s,i) => s + Math.max(0, qtyTotal(i.entries)), 0);
+    const outOfStock = items.filter(i => qtyTotal(i.entries) <= 0).length;
     const active = filterType === c.key;
     return `<div class="summary-card ${c.cls} ${active?'active':''}" onclick="toggleFilter('${c.key}')">
       <div class="label">${c.label}</div>
@@ -761,31 +775,75 @@ const pillClass = {
   "Red Wine":"pill-red","White Wine":"pill-white","Whisky":"pill-whisky",
   "Sake":"pill-sake","Champagne":"pill-champagne","Baijiu":"pill-baijiu","Cigarette":"pill-cigarette"
 };
-// Returns total numeric value: whole + partial fraction
-function qtyValue(qty, partial) {
-  const w = parseFloat(qty) || 0;
-  const p = parseFloat(partial) || 0;
-  return w + p;
+// ── QTY HELPERS ──────────────────────────────────────────────────────────
+const QTY_LABELS = {
+  1:    { short:'1',   long:'Full bottle',         note:'' },
+  0.75: { short:'3/4', long:'Three-quarter bottle', note:'¾ bottle' },
+  0.5:  { short:'1/2', long:'Half bottle',          note:'half bottle' },
+  0.25: { short:'1/4', long:'Quarter bottle',       note:'quarter bottle' },
+};
+
+// sum all entries
+function qtyTotal(entries) {
+  return (entries||[]).reduce((s,e) => s + (parseFloat(e.value)||0), 0);
 }
 
-const PARTIAL_LABEL = { 0:'', 0.25:'¼', 0.5:'½', 0.75:'¾' };
-
-function fmtQty(qty, partial) {
-  const w = parseInt(qty) || 0;
-  const p = parseFloat(partial) || 0;
-  const pLabel = PARTIAL_LABEL[p] || '';
-  if(w === 0 && p === 0) return '0';
-  if(w === 0 && p > 0) return pLabel;
-  if(p > 0) return w + ' + ' + pLabel;
-  return String(w);
+function fmtTotal(total) {
+  if(total <= 0) return '0';
+  const whole = Math.floor(total);
+  const frac = Math.round((total - whole) * 4); // quarters
+  const fracMap = {0:'',1:'¼',2:'½',3:'¾'};
+  if(whole === 0) return fracMap[frac] || total.toFixed(2);
+  return frac ? whole + ' + ' + fracMap[frac] : String(whole);
 }
 
-function qtyClass(qty, partial) {
-  const v = qtyValue(qty, partial);
+function fmtQtyEntries(entries) {
+  const total = qtyTotal(entries);
+  if(total <= 0) return '<span style="color:var(--danger);font-weight:600">0</span>';
+  return fmtTotal(total);
+}
+
+function qtyClass(entries) {
+  const v = qtyTotal(entries);
   if(v <= 0) return 'qty-zero';
-  if(v <= 2) return 'qty-low';
+  if(v < 2) return 'qty-low';
   if(v <= 5) return 'qty-ok';
   return 'qty-good';
+}
+
+// ── QTY ENTRY UI ─────────────────────────────────────────────────────────
+let tempQtyEntries = [];
+
+function addQtyEntry() {
+  const val = parseFloat(document.getElementById('qtyAddSelect').value);
+  const note = QTY_LABELS[val]?.note || '';
+  tempQtyEntries.push({value: val, note});
+  renderQtyEntries();
+}
+
+function removeQtyEntry(i) {
+  tempQtyEntries.splice(i, 1);
+  renderQtyEntries();
+}
+
+function renderQtyEntries() {
+  const container = document.getElementById('qtyEntries');
+  const badge = document.getElementById('qtyTotalBadge');
+  if(!tempQtyEntries.length) {
+    container.innerHTML = '<div style="font-size:0.78rem;color:var(--muted);padding:4px 2px">No bottles added yet — click Add to begin.</div>';
+  } else {
+    container.innerHTML = tempQtyEntries.map((e,i) => {
+      const lbl = QTY_LABELS[e.value];
+      return `<div class="qty-entry-row">
+        <span style="font-size:0.9rem;font-weight:600;color:var(--cream);min-width:32px">${lbl?.short||e.value}</span>
+        <span class="entry-note">${lbl?.long||''}</span>
+        <button class="qty-entry-del" onclick="removeQtyEntry(${i})">✕</button>
+      </div>`;
+    }).join('');
+  }
+  const total = qtyTotal(tempQtyEntries);
+  badge.innerHTML = 'Total: <strong>' + fmtTotal(total) + ' bottle' + (total !== 1 ? 's' : '') + '</strong>'
+    + (total > 0 ? ' <span style="color:var(--muted);font-size:0.72rem">(= ' + total.toFixed(2) + ' in decimal)</span>' : '');
 }
 function fmtPrice(p) {
   if(!p || p <= 0) return '<span style="color:var(--muted)">—</span>';
@@ -805,8 +863,8 @@ function getFiltered() {
   filterStock = document.getElementById('stockFilter').value;
   let list = [...inventory];
   if(filterType) list = list.filter(i => i.type === filterType);
-  if(filterStock === 'zero') list = list.filter(i => qtyValue(i.qty, i.partial) <= 0);
-  else if(filterStock === 'instock') list = list.filter(i => qtyValue(i.qty, i.partial) > 0);
+  if(filterStock === 'zero') list = list.filter(i => qtyTotal(i.entries) <= 0);
+  else if(filterStock === 'instock') list = list.filter(i => qtyTotal(i.entries) > 0);
   if(searchQ) list = list.filter(i =>
     i.item.toLowerCase().includes(searchQ) ||
     i.type.toLowerCase().includes(searchQ) ||
@@ -815,7 +873,8 @@ function getFiltered() {
   const f = currentSort.field, d = currentSort.dir;
   list.sort((a,b) => {
     let av = a[f], bv = b[f];
-    if(f === 'price') { av = av||0; bv = bv||0; }
+    if(f === 'qty') { av = qtyTotal(a.entries); bv = qtyTotal(b.entries); }
+    else if(f === 'price') { av = av||0; bv = bv||0; }
     if(typeof av === 'string') return d * av.localeCompare(bv);
     return d * ((av||0) - (bv||0));
   });
@@ -838,7 +897,7 @@ function renderTable() {
         <td style="color:var(--muted);font-size:0.78rem">${item.no}</td>
         <td class="type-cell"><span class="type-pill ${pillClass[item.type]||''}">${item.type}</span></td>
         <td class="item-name">${item.item}</td>
-        <td class="qty-cell ${qtyClass(item.qty, item.partial)}">${fmtQty(item.qty, item.partial)}</td>
+        <td class="qty-cell ${qtyClass(item.entries)}">${fmtQtyEntries(item.entries)}</td>
         <td class="price-cell">${fmtPrice(item.price)}</td>
         <td class="remark-cell">${item.remarks||'—'}</td>
         <td class="action-cell">
@@ -848,13 +907,13 @@ function renderTable() {
       </tr>`;
     }).join('');
   }
-  const totalQty = inventory.reduce((s,i) => s + Math.max(0, qtyValue(i.qty, i.partial)), 0);
-  const totalValue = inventory.filter(i=>i.price&&i.qty>0).reduce((s,i)=>s+i.price*i.qty,0);
+  const totalQty = inventory.reduce((s,i) => s + Math.max(0, qtyTotal(i.entries)), 0);
+  const totalValue = inventory.filter(i=>i.price&&qtyTotal(i.entries)>0).reduce((s,i)=>s+i.price*qtyTotal(i.entries),0);
   document.getElementById('countBadge').textContent = `${list.length} of ${inventory.length} items`;
   document.getElementById('footerStats').innerHTML = `
     <span>Total items: <strong>${inventory.length}</strong></span>
-    <span>Total bottles: <strong>${totalQty}</strong></span>
-    <span>Out of stock: <strong style="color:var(--danger)">${inventory.filter(i=>qtyValue(i.qty,i.partial)<=0).length}</strong></span>
+    <span>Total bottles: <strong>${Number.isInteger(totalQty) ? totalQty : totalQty.toFixed(2)}</strong></span>
+    <span>Out of stock: <strong style="color:var(--danger)">${inventory.filter(i=>qtyTotal(i.entries)<=0).length}</strong></span>
     ${totalValue ? `<span>Est. value (priced items): <strong>IDR ${totalValue.toLocaleString('id-ID')}</strong></span>` : ''}
     <span style="margin-left:auto;font-size:0.7rem">Last updated: ${new Date().toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'})}</span>
   `;
@@ -868,14 +927,12 @@ function openModal(idx) {
   document.getElementById('editIndex').value = '';
   document.getElementById('fType').value = 'Red Wine';
   document.getElementById('fItem').value = '';
-  document.getElementById('fQty').value = '';
   document.getElementById('fPrice').value = '';
   document.getElementById('fRemarks').value = '';
   document.getElementById('mvAmount').value = '';
   document.getElementById('mvNote').value = '';
-  // reset partial
-  const pr = document.querySelector('input[name="fPartial"][value="0"]');
-  if(pr) pr.checked = true;
+  tempQtyEntries = [];
+  renderQtyEntries();
   renderMovements();
   document.getElementById('movementSection').style.display = 'none';
   document.getElementById('modalOverlay').classList.add('open');
@@ -889,16 +946,13 @@ function openEdit(idx) {
   document.getElementById('editIndex').value = idx;
   document.getElementById('fType').value = item.type;
   document.getElementById('fItem').value = item.item;
-  document.getElementById('fQty').value = item.qty;
   document.getElementById('fPrice').value = item.price||'';
   document.getElementById('fRemarks').value = item.remarks||'';
   document.getElementById('mvAmount').value = '';
   document.getElementById('mvNote').value = '';
   document.getElementById('movementSection').style.display = 'block';
-  // restore partial
-  const pVal = item.partial || 0;
-  const pRadio = document.querySelector(`input[name="fPartial"][value="${pVal}"]`);
-  if(pRadio) pRadio.checked = true;
+  tempQtyEntries = JSON.parse(JSON.stringify(item.entries||[]));
+  renderQtyEntries();
   renderMovements();
   document.getElementById('modalOverlay').classList.add('open');
 }
@@ -920,23 +974,30 @@ function renderMovements() {
 }
 
 function addMovement() {
-  const amt = parseInt(document.getElementById('mvAmount').value);
+  const amt = parseFloat(document.getElementById('mvAmount').value);
   const note = document.getElementById('mvNote').value.trim();
   if(isNaN(amt)||amt===0) { showToast('Enter a valid movement amount'); return; }
   const today = new Date().toISOString().split('T')[0];
   tempMovements.push({date:today, change:amt, note});
-  // also update qty field
-  const currentQty = parseInt(document.getElementById('fQty').value)||0;
-  document.getElementById('fQty').value = currentQty + amt;
+  // reflect in qty entries: positive = add full bottles, negative = remove
+  if(amt > 0) {
+    for(let i=0;i<Math.floor(amt);i++) tempQtyEntries.push({value:1,note:''});
+  } else {
+    // remove entries from the end
+    let toRemove = Math.abs(amt);
+    while(toRemove > 0 && tempQtyEntries.length > 0) {
+      const last = tempQtyEntries[tempQtyEntries.length-1];
+      if(last.value <= toRemove) { toRemove -= last.value; tempQtyEntries.pop(); }
+      else { last.value = parseFloat((last.value - toRemove).toFixed(2)); toRemove = 0; }
+    }
+  }
+  renderQtyEntries();
   document.getElementById('mvAmount').value = '';
   document.getElementById('mvNote').value = '';
   renderMovements();
 }
 
 function removeMovement(i) {
-  const m = tempMovements[i];
-  const currentQty = parseInt(document.getElementById('fQty').value)||0;
-  document.getElementById('fQty').value = currentQty - m.change;
   tempMovements.splice(i,1);
   renderMovements();
 }
@@ -951,17 +1012,16 @@ function closeModalOnBg(e) {
 function saveItem() {
   const type = document.getElementById('fType').value;
   const item = document.getElementById('fItem').value.trim();
-  const qty = parseInt(document.getElementById('fQty').value)||0;
+  const entries = JSON.parse(JSON.stringify(tempQtyEntries));
   const price = parseFloat(document.getElementById('fPrice').value)||null;
   const remarks = document.getElementById('fRemarks').value.trim();
   if(!item) { showToast('Please enter an item name'); return; }
   const idx = document.getElementById('editIndex').value;
   if(idx !== '') {
-    inventory[parseInt(idx)] = {...inventory[parseInt(idx)], type, item, qty, price, remarks, movements: tempMovements};
+    inventory[parseInt(idx)] = {...inventory[parseInt(idx)], type, item, entries, price, remarks, movements: tempMovements};
     showToast('Item updated successfully');
   } else {
-    const maxNo = inventory.reduce((m,i) => Math.max(m, i.no||0), 0);
-    inventory.push({no: 0, type, item, qty, price, remarks, movements: tempMovements});
+    inventory.push({no:0, type, item, entries, price, remarks, movements: tempMovements});
     reNumber();
     showToast('Item added to inventory');
   }
@@ -1003,12 +1063,30 @@ function showToast(msg) {
   setTimeout(() => t.classList.remove('show'), 2500);
 }
 
+// ─── MIGRATE legacy data (qty/partial → entries) ─────────────────────────
+function migrateInventory(data) {
+  return data.map(item => {
+    if(item.entries) return item; // already new format
+    const entries = [];
+    const whole = parseInt(item.qty) || 0;
+    const partial = parseFloat(item.partial) || 0;
+    for(let i=0; i<whole; i++) entries.push({value:1, note:''});
+    if(partial > 0) entries.push({value: partial, note: QTY_LABELS[partial]?.note || 'partial'});
+    const {qty, partial:_p, ...rest} = item;
+    return {...rest, entries};
+  });
+}
+
 // ─── INIT ────────────────────────────────────────────────────────────────────
+inventory = migrateInventory(inventory);
+save();
+
 document.getElementById('typeFilter').addEventListener('change', () => {
   filterType = document.getElementById('typeFilter').value;
   renderSummary();
   renderTable();
 });
+renderQtyEntries();
 renderSummary();
 renderTable();
 </script>
