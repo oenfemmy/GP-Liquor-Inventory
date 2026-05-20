@@ -504,6 +504,82 @@
   }
   .qty-total-badge strong { color:var(--gold); }
 
+
+  /* GITHUB SYNC */
+  .sync-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 0.68rem;
+    letter-spacing: 0.08em;
+    color: var(--muted);
+    padding: 5px 10px;
+    border-radius: 3px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    transition: all 0.3s;
+  }
+  .sync-status.syncing { color: var(--gold); border-color: var(--gold); }
+  .sync-status.synced { color: var(--success); border-color: rgba(30,132,73,0.3); }
+  .sync-status.error { color: var(--danger); border-color: rgba(192,57,43,0.3); }
+  .sync-status .dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--muted);
+    transition: background 0.3s;
+  }
+  .sync-status.syncing .dot { background: var(--gold); animation: pulse 1s infinite; }
+  .sync-status.synced .dot { background: var(--success); }
+  .sync-status.error .dot { background: var(--danger); }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+  .gh-modal-overlay {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.75);
+    backdrop-filter: blur(4px);
+    z-index: 1100;
+    display: flex; align-items: center; justify-content: center;
+    opacity: 0; pointer-events: none;
+    transition: opacity 0.25s;
+  }
+  .gh-modal-overlay.open { opacity: 1; pointer-events: all; }
+  .gh-modal {
+    background: #ffffff;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    width: 480px; max-width: 95vw;
+    transform: translateY(20px);
+    transition: transform 0.25s;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.15);
+  }
+  .gh-modal-overlay.open .gh-modal { transform: translateY(0); }
+  .gh-info {
+    font-size: 0.78rem;
+    color: var(--muted);
+    line-height: 1.6;
+    margin-bottom: 16px;
+    padding: 12px;
+    background: var(--surface);
+    border-radius: 4px;
+    border: 1px solid var(--border);
+  }
+  .gh-info code {
+    background: rgba(160,116,42,0.1);
+    padding: 1px 5px;
+    border-radius: 2px;
+    font-size: 0.72rem;
+    color: var(--gold-light);
+  }
+  .gh-connected {
+    display: flex; align-items: center; gap: 8px;
+    padding: 10px 14px;
+    background: rgba(30,132,73,0.06);
+    border: 1px solid rgba(30,132,73,0.2);
+    border-radius: 4px;
+    margin-bottom: 16px;
+    font-size: 0.78rem;
+    color: var(--success);
+  }
+
 </style>
 </head>
 <body>
@@ -514,6 +590,10 @@
     <p>Private Collection · Stock Management</p>
   </div>
   <div class="header-actions">
+    <span class="sync-status" id="syncStatus" onclick="openGHSettings()" style="cursor:pointer" title="Click to configure GitHub sync">
+      <span class="dot"></span>
+      <span id="syncText">Local Only</span>
+    </span>
     <button class="btn btn-outline" onclick="exportCSV()">⬇ Export CSV</button>
     <button class="btn btn-primary" onclick="openModal()">+ Add Item</button>
   </div>
@@ -645,11 +725,247 @@
   </div>
 </div>
 
+<!-- GITHUB SYNC MODAL -->
+<div class="gh-modal-overlay" id="ghOverlay" onclick="if(event.target===this)closeGHSettings()">
+  <div class="gh-modal">
+    <div class="modal-header">
+      <h2>GitHub Sync Settings</h2>
+      <button class="modal-close" onclick="closeGHSettings()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="gh-info">
+        Data disimpan sebagai <code>inventory_data.json</code> di GitHub repo kamu.
+        Setiap kali kamu add/edit/delete item, file JSON di repo otomatis ke-update via GitHub API.<br><br>
+        <strong>Setup:</strong><br>
+        1. Buat Personal Access Token di GitHub → Settings → Developer settings → Fine-grained tokens<br>
+        2. Permission: <code>Contents</code> → Read and write<br>
+        3. Scope ke repo yang kamu pakai untuk GitHub Pages
+      </div>
+      <div id="ghConnectedBadge" style="display:none" class="gh-connected">
+        ✓ Connected — data syncs to GitHub automatically
+      </div>
+      <div class="form-row">
+        <label>GitHub Username</label>
+        <input type="text" id="ghUser" placeholder="e.g. johndoe">
+      </div>
+      <div class="form-row">
+        <label>Repository Name</label>
+        <input type="text" id="ghRepo" placeholder="e.g. wine-inventory">
+      </div>
+      <div class="form-row">
+        <label>Branch</label>
+        <input type="text" id="ghBranch" placeholder="main" value="main">
+      </div>
+      <div class="form-row">
+        <label>File Path (JSON data file)</label>
+        <input type="text" id="ghPath" placeholder="inventory_data.json" value="inventory_data.json">
+      </div>
+      <div class="form-row">
+        <label>Personal Access Token</label>
+        <input type="password" id="ghToken" placeholder="github_pat_...">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="disconnectGH()" id="ghDisconnectBtn" style="display:none;margin-right:auto;color:var(--danger);border-color:var(--danger)">Disconnect</button>
+      <button class="btn btn-outline" onclick="testGHConnection()">Test Connection</button>
+      <button class="btn btn-primary" onclick="saveGHSettings()">Save & Sync</button>
+    </div>
+  </div>
+</div>
+
 <!-- TOAST -->
 <div class="toast" id="toast"></div>
 
 <script>
-// ─── DATA ───────────────────────────────────────────────────────────────────
+// ─── GITHUB SYNC CONFIG ─────────────────────────────────────────────────────
+let ghConfig = JSON.parse(localStorage.getItem('gp_gh_config') || 'null');
+let ghSHA = null; // track file SHA for updates
+let isSyncing = false;
+
+function saveGHConfig() {
+  localStorage.setItem('gp_gh_config', JSON.stringify(ghConfig));
+}
+
+function isGHConfigured() {
+  return ghConfig && ghConfig.user && ghConfig.repo && ghConfig.token && ghConfig.path;
+}
+
+function updateSyncStatus(state, text) {
+  const el = document.getElementById('syncStatus');
+  const tx = document.getElementById('syncText');
+  el.className = 'sync-status ' + state;
+  tx.textContent = text;
+}
+
+// ─── GITHUB API HELPERS ─────────────────────────────────────────────────────
+async function ghFetch(method, path, body) {
+  const url = `https://api.github.com/repos/${ghConfig.user}/${ghConfig.repo}/contents/${path}`;
+  const opts = {
+    method,
+    headers: {
+      'Authorization': `Bearer ${ghConfig.token}`,
+      'Accept': 'application/vnd.github+json',
+      'X-GitHub-Api-Version': '2022-11-28',
+    }
+  };
+  if(body) {
+    opts.headers['Content-Type'] = 'application/json';
+    opts.body = JSON.stringify(body);
+  }
+  return fetch(url, opts);
+}
+
+async function loadFromGitHub() {
+  if(!isGHConfigured()) return false;
+  try {
+    updateSyncStatus('syncing', 'Loading…');
+    const branch = ghConfig.branch || 'main';
+    const res = await ghFetch('GET', `${ghConfig.path}?ref=${branch}`);
+    if(res.status === 404) {
+      // File doesn't exist yet — we'll create it on first save
+      ghSHA = null;
+      updateSyncStatus('synced', 'Connected (new)');
+      return false;
+    }
+    if(!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    ghSHA = data.sha;
+    const content = atob(data.content.replace(/\n/g, ''));
+    const decoded = new TextDecoder().decode(Uint8Array.from(content, c => c.charCodeAt(0)));
+    const parsed = JSON.parse(decoded);
+    if(Array.isArray(parsed) && parsed.length > 0) {
+      inventory = migrateInventory(parsed);
+      localStorage.setItem('gp_inventory', JSON.stringify(inventory));
+      updateSyncStatus('synced', 'Synced ✓');
+      return true;
+    }
+    updateSyncStatus('synced', 'Connected');
+    return false;
+  } catch(e) {
+    console.error('GitHub load error:', e);
+    updateSyncStatus('error', 'Sync error');
+    return false;
+  }
+}
+
+async function saveToGitHub() {
+  if(!isGHConfigured() || isSyncing) return;
+  isSyncing = true;
+  try {
+    updateSyncStatus('syncing', 'Saving…');
+    const json = JSON.stringify(inventory, null, 2);
+    const encoded = btoa(unescape(encodeURIComponent(json)));
+    const body = {
+      message: `Update inventory — ${new Date().toISOString().split('T')[0]}`,
+      content: encoded,
+      branch: ghConfig.branch || 'main',
+    };
+    if(ghSHA) body.sha = ghSHA;
+    const res = await ghFetch('PUT', ghConfig.path, body);
+    if(!res.ok) {
+      const err = await res.json();
+      // SHA mismatch — re-fetch and retry once
+      if(res.status === 409 || (err.message && err.message.includes('sha'))) {
+        await loadFromGitHub();
+        body.sha = ghSHA;
+        const retry = await ghFetch('PUT', ghConfig.path, body);
+        if(!retry.ok) throw new Error(`Retry failed: ${retry.status}`);
+        const retryData = await retry.json();
+        ghSHA = retryData.content.sha;
+      } else {
+        throw new Error(err.message || `HTTP ${res.status}`);
+      }
+    } else {
+      const data = await res.json();
+      ghSHA = data.content.sha;
+    }
+    updateSyncStatus('synced', 'Synced ✓');
+  } catch(e) {
+    console.error('GitHub save error:', e);
+    updateSyncStatus('error', 'Save failed');
+    showToast('GitHub save failed: ' + e.message);
+  } finally {
+    isSyncing = false;
+  }
+}
+
+// ─── GITHUB SETTINGS UI ────────────────────────────────────────────────────
+function openGHSettings() {
+  if(ghConfig) {
+    document.getElementById('ghUser').value = ghConfig.user || '';
+    document.getElementById('ghRepo').value = ghConfig.repo || '';
+    document.getElementById('ghBranch').value = ghConfig.branch || 'main';
+    document.getElementById('ghPath').value = ghConfig.path || 'inventory_data.json';
+    document.getElementById('ghToken').value = ghConfig.token || '';
+  }
+  const connected = isGHConfigured();
+  document.getElementById('ghConnectedBadge').style.display = connected ? 'flex' : 'none';
+  document.getElementById('ghDisconnectBtn').style.display = connected ? 'inline-flex' : 'none';
+  document.getElementById('ghOverlay').classList.add('open');
+}
+
+function closeGHSettings() {
+  document.getElementById('ghOverlay').classList.remove('open');
+}
+
+async function testGHConnection() {
+  const user = document.getElementById('ghUser').value.trim();
+  const repo = document.getElementById('ghRepo').value.trim();
+  const token = document.getElementById('ghToken').value.trim();
+  if(!user || !repo || !token) { showToast('Please fill in all fields'); return; }
+  try {
+    const res = await fetch(`https://api.github.com/repos/${user}/${repo}`, {
+      headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/vnd.github+json' }
+    });
+    if(res.ok) {
+      const data = await res.json();
+      showToast(`Connected to ${data.full_name} ✓`);
+    } else if(res.status === 404) {
+      showToast('Repo not found — check username/repo name');
+    } else if(res.status === 401) {
+      showToast('Invalid token — check your PAT');
+    } else {
+      showToast(`Error: HTTP ${res.status}`);
+    }
+  } catch(e) {
+    showToast('Connection failed: ' + e.message);
+  }
+}
+
+async function saveGHSettings() {
+  const user = document.getElementById('ghUser').value.trim();
+  const repo = document.getElementById('ghRepo').value.trim();
+  const branch = document.getElementById('ghBranch').value.trim() || 'main';
+  const path = document.getElementById('ghPath').value.trim() || 'inventory_data.json';
+  const token = document.getElementById('ghToken').value.trim();
+  if(!user || !repo || !token) { showToast('Please fill in username, repo, and token'); return; }
+  ghConfig = { user, repo, branch, path, token };
+  saveGHConfig();
+  ghSHA = null;
+  closeGHSettings();
+  // Try loading remote data first
+  const loaded = await loadFromGitHub();
+  if(loaded) {
+    renderTable();
+    showToast('Loaded inventory from GitHub ✓');
+  } else {
+    // Push current local data to GitHub
+    await saveToGitHub();
+    showToast('Inventory pushed to GitHub ✓');
+  }
+}
+
+function disconnectGH() {
+  if(!confirm('Disconnect GitHub sync? Data will remain in localStorage only.')) return;
+  ghConfig = null;
+  ghSHA = null;
+  localStorage.removeItem('gp_gh_config');
+  updateSyncStatus('', 'Local Only');
+  closeGHSettings();
+  showToast('GitHub sync disconnected');
+}
+
+// ─── DEFAULT DATA ───────────────────────────────────────────────────────────
 const defaultData = [
   {no:1,type:"Red Wine",item:"1999, Bonnes Mares Grand Cru Domaine G Roumier",qty:1,price:null,remarks:"From Pakubuwono",movements:[]},
   {no:2,type:"Red Wine",item:"2001, Musigny Grand Cru Faiveley",qty:1,price:null,remarks:"From Pakubuwono",movements:[]},
@@ -735,6 +1051,10 @@ let tempMovements = [];
 
 function save() {
   localStorage.setItem('gp_inventory', JSON.stringify(inventory));
+  // Also push to GitHub if configured
+  if(isGHConfigured()) {
+    saveToGitHub();
+  }
 }
 
 // ─── SUMMARY CARDS ───────────────────────────────────────────────────────────
@@ -899,7 +1219,7 @@ function renderTable() {
         <td class="item-name">${item.item}</td>
         <td class="qty-cell ${qtyClass(item.entries)}">${fmtQtyEntries(item.entries)}</td>
         <td class="price-cell">${fmtPrice(item.price)}</td>
-        <td class="remark-cell">${item.remarks||'—'}</td>
+        <td class="remark-cell">${item.remarks||'\u2014'}</td>
         <td class="action-cell">
           <button class="edit-btn" onclick="openEdit(${idx})">✏ Edit</button>
           <button class="del-btn" onclick="deleteItem(${idx})">✕</button>
@@ -1046,7 +1366,7 @@ function deleteItem(idx) {
 // ─── EXPORT ──────────────────────────────────────────────────────────────────
 function exportCSV() {
   const headers = ['No','Type','Item','Qty','Price/Bottle (IDR)','Remarks'];
-  const rows = inventory.map(i => [i.no, i.type, `"${i.item}"`, i.qty, i.price||'', `"${i.remarks||''}"`]);
+  const rows = inventory.map(i => [i.no, i.type, `"${i.item}"`, qtyTotal(i.entries), i.price||'', `"${i.remarks||''}"`]);
   const csv = [headers, ...rows].map(r => r.join(',')).join('\n');
   const a = document.createElement('a');
   a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv);
@@ -1079,7 +1399,7 @@ function migrateInventory(data) {
 
 // ─── INIT ────────────────────────────────────────────────────────────────────
 inventory = migrateInventory(inventory);
-save();
+localStorage.setItem('gp_inventory', JSON.stringify(inventory));
 
 document.getElementById('typeFilter').addEventListener('change', () => {
   filterType = document.getElementById('typeFilter').value;
@@ -1089,6 +1409,14 @@ document.getElementById('typeFilter').addEventListener('change', () => {
 renderQtyEntries();
 renderSummary();
 renderTable();
+
+// Auto-load from GitHub if configured
+(async () => {
+  if(isGHConfigured()) {
+    const loaded = await loadFromGitHub();
+    if(loaded) renderTable();
+  }
+})();
 </script>
 </body>
 </html>
