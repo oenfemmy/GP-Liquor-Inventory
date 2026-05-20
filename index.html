@@ -5,6 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>GP Liquor Inventory Dashboard</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300&family=Jost:wght@300;400;500&display=swap" rel="stylesheet">
+<!-- jsPDF + autotable for PDF export -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
 <style>
   :root {
     --bg: #f5f0ea;
@@ -580,6 +583,101 @@
     color: var(--success);
   }
 
+  /* PDF EXPORT MODAL */
+  .pdf-cat-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+    margin-bottom: 14px;
+  }
+  .pdf-cat-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 11px 14px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.15s;
+    user-select: none;
+  }
+  .pdf-cat-item:hover {
+    border-color: var(--gold);
+    background: rgba(160,116,42,0.04);
+  }
+  .pdf-cat-item input[type="checkbox"] {
+    width: 16px; height: 16px;
+    accent-color: var(--gold);
+    cursor: pointer;
+    margin: 0;
+  }
+  .pdf-cat-item .cat-color {
+    width: 10px; height: 10px; border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .pdf-cat-item .cat-name {
+    flex: 1;
+    font-size: 0.85rem;
+    color: var(--cream);
+    font-weight: 500;
+  }
+  .pdf-cat-item .cat-count {
+    font-size: 0.7rem;
+    color: var(--muted);
+    background: var(--card);
+    padding: 2px 8px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+  }
+  .pdf-cat-item.checked {
+    border-color: var(--gold);
+    background: rgba(160,116,42,0.06);
+  }
+  .pdf-toolbar {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 14px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  .pdf-toolbar .btn-link {
+    background: transparent;
+    border: none;
+    color: var(--gold);
+    font-size: 0.72rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    cursor: pointer;
+    padding: 4px 8px;
+    transition: color 0.15s;
+  }
+  .pdf-toolbar .btn-link:hover { color: var(--gold-light); }
+  .pdf-options {
+    padding: 12px 14px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    margin-bottom: 14px;
+    font-size: 0.8rem;
+  }
+  .pdf-options label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    color: var(--cream);
+  }
+  .pdf-options label + label { margin-top: 8px; }
+  .pdf-options input[type="checkbox"] {
+    width: 15px; height: 15px;
+    accent-color: var(--gold);
+    cursor: pointer;
+  }
+  @media (max-width: 600px) {
+    .pdf-cat-grid { grid-template-columns: 1fr; }
+  }
+
 </style>
 </head>
 <body>
@@ -595,6 +693,7 @@
       <span id="syncText">Local Only</span>
     </span>
     <button class="btn btn-outline" onclick="exportCSV()">⬇ Export CSV</button>
+    <button class="btn btn-outline" onclick="openPDFExport()">📄 Export PDF</button>
     <button class="btn btn-primary" onclick="openModal()">+ Add Item</button>
   </div>
 </header>
@@ -721,6 +820,45 @@
     <div class="modal-footer">
       <button class="btn btn-outline" onclick="closeModal()">Cancel</button>
       <button class="btn btn-primary" onclick="saveItem()">Save Item</button>
+    </div>
+  </div>
+</div>
+
+<!-- PDF EXPORT MODAL -->
+<div class="gh-modal-overlay" id="pdfOverlay" onclick="if(event.target===this)closePDFModal()">
+  <div class="gh-modal">
+    <div class="modal-header">
+      <h2>Export PDF</h2>
+      <button class="modal-close" onclick="closePDFModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="gh-info">
+        Pilih kategori yang ingin di-export. Setiap kategori akan menjadi <strong>section terpisah</strong> di PDF dengan tabel inventory lengkap. File otomatis ter-download dengan nama <code>GP_Liquor_Inventory_YYYY-MM-DD.pdf</code>.
+      </div>
+      <div class="pdf-toolbar">
+        <button class="btn-link" onclick="togglePDFAll(true)">✓ Select All</button>
+        <button class="btn-link" onclick="togglePDFAll(false)">✕ Deselect All</button>
+        <button class="btn-link" onclick="togglePDFInStockOnly()" id="pdfStockToggleBtn">Only In-Stock Categories</button>
+      </div>
+      <div class="pdf-cat-grid" id="pdfCatGrid"></div>
+      <div class="pdf-options">
+        <label>
+          <input type="checkbox" id="pdfIncludeOutOfStock" checked>
+          Include out-of-stock items (qty = 0)
+        </label>
+        <label>
+          <input type="checkbox" id="pdfIncludePrice" checked>
+          Include price column
+        </label>
+        <label>
+          <input type="checkbox" id="pdfIncludeMovements">
+          Include stock movement log (appendix per category)
+        </label>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closePDFModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="generatePDF()">📄 Download PDF</button>
     </div>
   </div>
 </div>
@@ -1400,6 +1538,368 @@ function exportCSV() {
   a.download = `GP_Liquor_Inventory_${new Date().toISOString().split('T')[0]}.csv`;
   a.click();
   showToast('CSV exported');
+}
+
+// ─── PDF EXPORT ──────────────────────────────────────────────────────────────
+// Color palette (RGB) — match dashboard theme
+const PDF_COLORS = {
+  "Red Wine":   [139, 38, 53],
+  "White Wine": [122, 96, 16],
+  "Whisky":     [160, 69, 16],
+  "Sake":       [90, 80, 72],
+  "Champagne":  [154, 120, 32],
+  "Baijiu":     [42, 106, 72],
+  "Cigarette":  [85, 85, 85],
+};
+const PDF_GOLD = [160, 116, 42];
+const PDF_CREAM = [44, 34, 24];
+const PDF_MUTED = [138, 122, 104];
+
+function openPDFExport() {
+  const grid = document.getElementById('pdfCatGrid');
+  grid.innerHTML = categories.map(c => {
+    const items = inventory.filter(i => i.type === c.key);
+    const inStock = items.filter(i => qtyTotal(i.entries) > 0).length;
+    const rgb = PDF_COLORS[c.key] || [0,0,0];
+    const dotColor = `rgb(${rgb.join(',')})`;
+    const disabled = items.length === 0 ? 'disabled' : '';
+    const opacity = items.length === 0 ? 'opacity:0.45;cursor:not-allowed' : '';
+    return `<label class="pdf-cat-item" data-cat="${c.key}" style="${opacity}">
+      <input type="checkbox" class="pdf-cat-cb" value="${c.key}" ${items.length === 0 ? 'disabled' : 'checked'}
+             onchange="updatePDFCatCheckedState(this)">
+      <span class="cat-color" style="background:${dotColor}"></span>
+      <span class="cat-name">${c.label}</span>
+      <span class="cat-count">${items.length} SKU · ${inStock} in stock</span>
+    </label>`;
+  }).join('');
+  // Set initial checked-state styling
+  document.querySelectorAll('.pdf-cat-cb').forEach(cb => updatePDFCatCheckedState(cb));
+  document.getElementById('pdfOverlay').classList.add('open');
+}
+
+function updatePDFCatCheckedState(cb) {
+  const parent = cb.closest('.pdf-cat-item');
+  if(cb.checked) parent.classList.add('checked');
+  else parent.classList.remove('checked');
+}
+
+function closePDFModal() {
+  document.getElementById('pdfOverlay').classList.remove('open');
+}
+
+function togglePDFAll(checked) {
+  document.querySelectorAll('.pdf-cat-cb').forEach(cb => {
+    if(!cb.disabled) {
+      cb.checked = checked;
+      updatePDFCatCheckedState(cb);
+    }
+  });
+}
+
+function togglePDFInStockOnly() {
+  document.querySelectorAll('.pdf-cat-cb').forEach(cb => {
+    if(cb.disabled) return;
+    const items = inventory.filter(i => i.type === cb.value);
+    const hasStock = items.some(i => qtyTotal(i.entries) > 0);
+    cb.checked = hasStock;
+    updatePDFCatCheckedState(cb);
+  });
+}
+
+function generatePDF() {
+  const selected = Array.from(document.querySelectorAll('.pdf-cat-cb:checked')).map(cb => cb.value);
+  if(selected.length === 0) { showToast('Pilih minimal satu kategori'); return; }
+
+  const includeOOS = document.getElementById('pdfIncludeOutOfStock').checked;
+  const includePrice = document.getElementById('pdfIncludePrice').checked;
+  const includeMovements = document.getElementById('pdfIncludeMovements').checked;
+
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ orientation:'portrait', unit:'mm', format:'a4' });
+  const pageW = doc.internal.pageSize.getWidth();
+  const pageH = doc.internal.pageSize.getHeight();
+  const today = new Date().toLocaleDateString('en-GB',{day:'2-digit',month:'long',year:'numeric'});
+
+  // ─── COVER PAGE ────────────────────────────────────────────────────────
+  doc.setFillColor(245, 240, 234);                  // bg cream
+  doc.rect(0, 0, pageW, pageH, 'F');
+
+  // Gold accent bar
+  doc.setFillColor(...PDF_GOLD);
+  doc.rect(0, 0, pageW, 6, 'F');
+
+  // Title
+  doc.setTextColor(...PDF_GOLD);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(28);
+  doc.text('GP Liquor Inventory', pageW/2, 70, { align:'center' });
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(10);
+  doc.setTextColor(...PDF_MUTED);
+  doc.text('PRIVATE COLLECTION  ·  STOCK REPORT', pageW/2, 80, { align:'center' });
+
+  // Decorative line
+  doc.setDrawColor(...PDF_GOLD);
+  doc.setLineWidth(0.4);
+  doc.line(pageW/2 - 25, 86, pageW/2 + 25, 86);
+
+  // Summary stats
+  doc.setTextColor(...PDF_CREAM);
+  doc.setFontSize(11);
+  let y = 110;
+  doc.setFont('helvetica', 'bold');
+  doc.text('Report Summary', pageW/2, y, { align:'center' });
+  y += 10;
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(10);
+  let totalAllBottles = 0, totalAllSKUs = 0, totalAllValue = 0;
+  selected.forEach(cat => {
+    let items = inventory.filter(i => i.type === cat);
+    if(!includeOOS) items = items.filter(i => qtyTotal(i.entries) > 0);
+    const bottles = items.reduce((s,i)=>s+Math.max(0,qtyTotal(i.entries)),0);
+    const value = items.filter(i=>i.price).reduce((s,i)=>s+i.price*Math.max(0,qtyTotal(i.entries)),0);
+    totalAllBottles += bottles; totalAllSKUs += items.length; totalAllValue += value;
+
+    const rgb = PDF_COLORS[cat] || [0,0,0];
+    doc.setFillColor(...rgb);
+    doc.circle(pageW/2 - 55, y - 1.2, 1.6, 'F');
+    doc.setTextColor(...PDF_CREAM);
+    doc.text(cat, pageW/2 - 50, y);
+    doc.text(`${items.length} SKU`, pageW/2 + 5, y, { align:'right' });
+    doc.text(`${fmtTotal(bottles)} bottles`, pageW/2 + 55, y, { align:'right' });
+    y += 7;
+  });
+
+  // Totals row
+  y += 3;
+  doc.setDrawColor(...PDF_GOLD);
+  doc.setLineWidth(0.3);
+  doc.line(pageW/2 - 60, y - 4, pageW/2 + 60, y - 4);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(...PDF_GOLD);
+  doc.text('TOTAL', pageW/2 - 50, y);
+  doc.text(`${totalAllSKUs} SKU`, pageW/2 + 5, y, { align:'right' });
+  doc.text(`${fmtTotal(totalAllBottles)} bottles`, pageW/2 + 55, y, { align:'right' });
+
+  if(includePrice && totalAllValue > 0) {
+    y += 10;
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    doc.setTextColor(...PDF_MUTED);
+    doc.text(`Estimated value (priced items only): IDR ${totalAllValue.toLocaleString('id-ID')}`,
+             pageW/2, y, { align:'center' });
+  }
+
+  // Date footer on cover
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9);
+  doc.setTextColor(...PDF_MUTED);
+  doc.text(`Generated: ${today}`, pageW/2, pageH - 20, { align:'center' });
+  doc.setFontSize(7);
+  doc.text(`Categories: ${selected.length} of ${categories.length}`,
+           pageW/2, pageH - 14, { align:'center' });
+
+  // ─── CATEGORY SECTIONS ─────────────────────────────────────────────────
+  selected.forEach((cat, idx) => {
+    doc.addPage();
+    renderCategorySection(doc, cat, { includeOOS, includePrice, includeMovements, today });
+  });
+
+  // ─── PAGE NUMBERS ──────────────────────────────────────────────────────
+  const total = doc.internal.getNumberOfPages();
+  for(let i = 1; i <= total; i++) {
+    doc.setPage(i);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.setTextColor(...PDF_MUTED);
+    if(i > 1) {
+      doc.text(`Page ${i} of ${total}`, pageW - 15, pageH - 8, { align:'right' });
+      doc.text('GP Liquor Inventory', 15, pageH - 8);
+    }
+  }
+
+  // Save
+  const filename = `GP_Liquor_Inventory_${new Date().toISOString().split('T')[0]}.pdf`;
+  doc.save(filename);
+  closePDFModal();
+  showToast(`PDF exported (${selected.length} ${selected.length===1?'category':'categories'})`);
+}
+
+function renderCategorySection(doc, cat, opts) {
+  const pageW = doc.internal.pageSize.getWidth();
+  const pageH = doc.internal.pageSize.getHeight();
+  let items = inventory.filter(i => i.type === cat);
+  if(!opts.includeOOS) items = items.filter(i => qtyTotal(i.entries) > 0);
+  const rgb = PDF_COLORS[cat] || [0,0,0];
+
+  // ── Header band ─────────────────────────────────────────────────────
+  doc.setFillColor(...rgb);
+  doc.rect(0, 0, pageW, 22, 'F');
+
+  doc.setTextColor(255, 255, 255);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(16);
+  doc.text(cat.toUpperCase(), 15, 14);
+
+  // Right side stats
+  const totalBottles = items.reduce((s,i)=>s+Math.max(0,qtyTotal(i.entries)),0);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9);
+  doc.text(`${items.length} SKU  ·  ${fmtTotal(totalBottles)} bottles`, pageW - 15, 14, { align:'right' });
+
+  // Date small
+  doc.setFontSize(7);
+  doc.text(opts.today, pageW - 15, 19, { align:'right' });
+
+  if(items.length === 0) {
+    doc.setTextColor(...PDF_MUTED);
+    doc.setFontSize(11);
+    doc.setFont('helvetica', 'italic');
+    doc.text('No items in this category match the current filter.',
+             pageW/2, 60, { align:'center' });
+    return;
+  }
+
+  // ── Inventory Table ─────────────────────────────────────────────────
+  const headers = opts.includePrice
+    ? ['#','Item','Qty','Price / Bottle (IDR)','Total Value (IDR)','Remarks']
+    : ['#','Item','Qty','Remarks'];
+
+  const body = items.map(i => {
+    const qty = Math.max(0, qtyTotal(i.entries));
+    const baseRow = [
+      String(i.no),
+      i.item,
+      fmtTotal(qty),
+    ];
+    if(opts.includePrice) {
+      baseRow.push(i.price ? Number(i.price).toLocaleString('id-ID') : '—');
+      baseRow.push(i.price ? Number(i.price * qty).toLocaleString('id-ID') : '—');
+    }
+    baseRow.push(i.remarks || '');
+    return baseRow;
+  });
+
+  // Total row
+  const totalValue = items.filter(i=>i.price).reduce((s,i)=>s+i.price*Math.max(0,qtyTotal(i.entries)),0);
+  const totalRow = opts.includePrice
+    ? ['', 'TOTAL', fmtTotal(totalBottles), '', totalValue > 0 ? Number(totalValue).toLocaleString('id-ID') : '—', '']
+    : ['', 'TOTAL', fmtTotal(totalBottles), ''];
+
+  doc.autoTable({
+    startY: 30,
+    head: [headers],
+    body: body,
+    foot: [totalRow],
+    margin: { left: 12, right: 12 },
+    styles: {
+      font: 'helvetica',
+      fontSize: 8.5,
+      cellPadding: 3,
+      textColor: PDF_CREAM,
+      lineColor: [221, 212, 198],
+      lineWidth: 0.15,
+    },
+    headStyles: {
+      fillColor: rgb,
+      textColor: [255,255,255],
+      fontStyle: 'bold',
+      fontSize: 8,
+      cellPadding: 4,
+      halign: 'left',
+    },
+    footStyles: {
+      fillColor: [240, 235, 226],
+      textColor: PDF_GOLD,
+      fontStyle: 'bold',
+      fontSize: 8.5,
+      lineColor: rgb,
+      lineWidth: 0.3,
+    },
+    alternateRowStyles: { fillColor: [250, 247, 241] },
+    columnStyles: opts.includePrice ? {
+      0: { halign: 'center', cellWidth: 10, textColor: PDF_MUTED },
+      1: { cellWidth: 'auto' },
+      2: { halign: 'center', cellWidth: 18, fontStyle: 'bold' },
+      3: { halign: 'right', cellWidth: 28 },
+      4: { halign: 'right', cellWidth: 28 },
+      5: { cellWidth: 35, textColor: PDF_MUTED, fontSize: 7.5 },
+    } : {
+      0: { halign: 'center', cellWidth: 10, textColor: PDF_MUTED },
+      1: { cellWidth: 'auto' },
+      2: { halign: 'center', cellWidth: 22, fontStyle: 'bold' },
+      3: { cellWidth: 60, textColor: PDF_MUTED, fontSize: 7.5 },
+    },
+    didParseCell: (data) => {
+      // Highlight zero-stock rows
+      if(data.section === 'body' && data.column.index === 2) {
+        const item = items[data.row.index];
+        const q = Math.max(0, qtyTotal(item.entries));
+        if(q <= 0) {
+          data.cell.styles.textColor = [192, 57, 43];
+          data.cell.styles.fontStyle = 'bold';
+        } else if(q < 2) {
+          data.cell.styles.textColor = [218, 119, 30];
+        }
+      }
+    },
+  });
+
+  // ── Movement Log Appendix (optional) ─────────────────────────────────
+  if(opts.includeMovements) {
+    const itemsWithMovements = items.filter(i => (i.movements||[]).length > 0);
+    if(itemsWithMovements.length > 0) {
+      let yPos = doc.lastAutoTable.finalY + 12;
+      if(yPos > pageH - 50) { doc.addPage(); yPos = 20; }
+
+      doc.setTextColor(...rgb);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(10);
+      doc.text('Stock Movement Log', 15, yPos);
+      yPos += 2;
+      doc.setDrawColor(...rgb);
+      doc.setLineWidth(0.3);
+      doc.line(15, yPos, pageW - 15, yPos);
+
+      const mvBody = [];
+      itemsWithMovements.forEach(item => {
+        (item.movements || []).forEach(m => {
+          mvBody.push([
+            m.date || '',
+            item.item,
+            (m.change >= 0 ? '+' : '') + m.change,
+            m.note || '',
+          ]);
+        });
+      });
+      // Sort by date descending
+      mvBody.sort((a,b) => (b[0]||'').localeCompare(a[0]||''));
+
+      doc.autoTable({
+        startY: yPos + 3,
+        head: [['Date','Item','Change','Note']],
+        body: mvBody,
+        margin: { left: 12, right: 12 },
+        styles: { font:'helvetica', fontSize:7.5, cellPadding:2.5, textColor:PDF_CREAM, lineColor:[221,212,198], lineWidth:0.1 },
+        headStyles: { fillColor:[240,235,226], textColor:PDF_GOLD, fontStyle:'bold', fontSize:7.5 },
+        columnStyles: {
+          0: { cellWidth: 22, textColor: PDF_MUTED },
+          1: { cellWidth: 'auto' },
+          2: { halign:'center', cellWidth: 18, fontStyle:'bold' },
+          3: { cellWidth: 60, textColor: PDF_MUTED, fontSize: 7 },
+        },
+        didParseCell: (data) => {
+          if(data.section === 'body' && data.column.index === 2) {
+            const v = parseFloat(data.cell.text[0]);
+            if(v > 0) data.cell.styles.textColor = [30, 132, 73];
+            else if(v < 0) data.cell.styles.textColor = [192, 57, 43];
+          }
+        },
+      });
+    }
+  }
 }
 
 // ─── TOAST ───────────────────────────────────────────────────────────────────
