@@ -678,6 +678,79 @@
     .pdf-cat-grid { grid-template-columns: 1fr; }
   }
 
+  /* ── SHEET TABS ── */
+  .sheet-tabs {
+    display: flex;
+    gap: 0;
+    margin-bottom: 24px;
+    border-bottom: 2px solid var(--border);
+    position: relative;
+  }
+  .sheet-tab {
+    padding: 13px 28px 11px;
+    font-family: 'Jost', sans-serif;
+    font-size: 0.78rem;
+    font-weight: 500;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--muted);
+    cursor: pointer;
+    border: 1px solid transparent;
+    border-bottom: none;
+    border-radius: 6px 6px 0 0;
+    background: transparent;
+    transition: all 0.2s;
+    position: relative;
+    bottom: -2px;
+  }
+  .sheet-tab:hover { color: var(--gold); background: rgba(160,116,42,0.04); }
+  .sheet-tab.active {
+    color: var(--gold-light);
+    background: var(--card);
+    border-color: var(--border);
+    font-weight: 600;
+  }
+  .sheet-tab .tab-badge {
+    display: inline-block;
+    font-size: 0.65rem;
+    font-weight: 400;
+    padding: 1px 8px;
+    border-radius: 10px;
+    margin-left: 8px;
+    vertical-align: middle;
+    letter-spacing: 0.05em;
+  }
+  .sheet-tab.active .tab-badge {
+    background: rgba(160,116,42,0.12);
+    color: var(--gold);
+  }
+  .sheet-tab:not(.active) .tab-badge {
+    background: var(--surface);
+    color: var(--muted);
+  }
+  .tab-icon {
+    margin-right: 6px;
+    font-size: 0.9rem;
+  }
+  .sheet-indicator {
+    font-size: 0.72rem;
+    color: var(--muted);
+    margin-bottom: 16px;
+    padding: 8px 14px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .sheet-indicator .ind-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+  }
+  .sheet-indicator.personal .ind-dot { background: var(--gold); }
+  .sheet-indicator.company .ind-dot { background: #2a6a48; }
+  .sheet-indicator.oos .ind-dot { background: var(--danger); }
+
 </style>
 </head>
 <body>
@@ -685,7 +758,7 @@
 <header>
   <div class="logo-area">
     <h1>GP Liquor Inventory</h1>
-    <p>Private Collection · Stock Management</p>
+    <p>Private Collection · Stock Management · Personal &amp; Company</p>
   </div>
   <div class="header-actions">
     <span class="sync-status" id="syncStatus" onclick="openGHSettings()" style="cursor:pointer" title="Click to configure GitHub sync">
@@ -699,6 +772,26 @@
 </header>
 
 <div class="container">
+
+  <!-- SHEET TABS -->
+  <div class="sheet-tabs" id="sheetTabs">
+    <button class="sheet-tab active" onclick="switchSheet('personal')" id="tabPersonal">
+      <span class="tab-icon">🍷</span>Personal
+      <span class="tab-badge" id="badgePersonal">0</span>
+    </button>
+    <button class="sheet-tab" onclick="switchSheet('company')" id="tabCompany">
+      <span class="tab-icon">🏢</span>Company Used
+      <span class="tab-badge" id="badgeCompany">0</span>
+    </button>
+    <button class="sheet-tab" onclick="switchSheet('oos')" id="tabOOS">
+      <span class="tab-icon">📦</span>Out of Stock
+      <span class="tab-badge" id="badgeOOS">0</span>
+    </button>
+  </div>
+  <div class="sheet-indicator personal" id="sheetIndicator">
+    <span class="ind-dot"></span>
+    <span id="sheetIndicatorText">Showing: Personal Inventory — items for personal use</span>
+  </div>
 
   <!-- SUMMARY CARDS -->
   <div class="summary-grid" id="summaryGrid"></div>
@@ -1205,6 +1298,77 @@ const defaultData = [
   {no:71,type:"Cigarette",item:"China SuperSlim",qty:10,price:null,remarks:"",movements:[]},
 ];
 
+// ─── SHEET SYSTEM: Company Used vs Personal ────────────────────────────────
+// Item numbers designated as "Company Used" by management
+const COMPANY_USED_ITEMS = new Set([
+  // Red Wine
+  8, 9, 10, 11,
+  // White Wine
+  17, 19, 21, 22, 23, 24, 25, 26,
+  // Whisky
+  27, 28, 29, 34, 38, 39, 41, 69,
+  // Sake
+  42, 43, 68,
+  // Champagne
+  44, 45, 46, 48, 50, 51,
+  // Cigarette
+  63, 64, 65, 66, 67
+]);
+
+let activeSheet = 'personal'; // 'personal', 'company', or 'oos'
+
+function isCompanyItem(item) {
+  return COMPANY_USED_ITEMS.has(item.no);
+}
+
+function getSheetInventory() {
+  if(activeSheet === 'oos') {
+    // All items with qty = 0, regardless of personal/company
+    return inventory.filter(i => qtyTotal(i.entries) <= 0);
+  }
+  if(activeSheet === 'company') {
+    // Company items that still have stock
+    return inventory.filter(i => COMPANY_USED_ITEMS.has(i.no) && qtyTotal(i.entries) > 0);
+  }
+  // Personal: not company AND has stock
+  return inventory.filter(i => !COMPANY_USED_ITEMS.has(i.no) && qtyTotal(i.entries) > 0);
+}
+
+function switchSheet(sheet) {
+  activeSheet = sheet;
+  // Update tab active states
+  document.getElementById('tabPersonal').classList.toggle('active', sheet === 'personal');
+  document.getElementById('tabCompany').classList.toggle('active', sheet === 'company');
+  document.getElementById('tabOOS').classList.toggle('active', sheet === 'oos');
+  // Update indicator
+  const indicator = document.getElementById('sheetIndicator');
+  const indicatorText = document.getElementById('sheetIndicatorText');
+  if(sheet === 'personal') {
+    indicator.className = 'sheet-indicator personal';
+    indicatorText.textContent = 'Showing: Personal Inventory — items in stock for personal use';
+  } else if(sheet === 'company') {
+    indicator.className = 'sheet-indicator company';
+    indicatorText.textContent = 'Showing: Company Used — items in stock allocated for company/business use';
+  } else {
+    indicator.className = 'sheet-indicator oos';
+    indicatorText.textContent = 'Showing: Out of Stock — all items with zero quantity (personal & company)';
+  }
+  // Update badges
+  updateSheetBadges();
+  // Re-render
+  renderSummary();
+  renderTable();
+}
+
+function updateSheetBadges() {
+  const personalCount = inventory.filter(i => !COMPANY_USED_ITEMS.has(i.no) && qtyTotal(i.entries) > 0).length;
+  const companyCount = inventory.filter(i => COMPANY_USED_ITEMS.has(i.no) && qtyTotal(i.entries) > 0).length;
+  const oosCount = inventory.filter(i => qtyTotal(i.entries) <= 0).length;
+  document.getElementById('badgePersonal').textContent = personalCount + ' items';
+  document.getElementById('badgeCompany').textContent = companyCount + ' items';
+  document.getElementById('badgeOOS').textContent = oosCount + ' items';
+}
+
 // Load from localStorage or use defaults
 let inventory = JSON.parse(localStorage.getItem('gp_inventory') || 'null') || defaultData;
 let currentSort = {field:'no', dir:1};
@@ -1216,6 +1380,7 @@ let tempMovements = [];
 
 function save() {
   localStorage.setItem('gp_inventory', JSON.stringify(inventory));
+  updateSheetBadges();
   // Also push to GitHub if configured
   if(isGHConfigured()) {
     saveToGitHub();
@@ -1235,11 +1400,13 @@ const categories = [
 
 function renderSummary() {
   const grid = document.getElementById('summaryGrid');
+  const sheetInv = getSheetInventory();
   grid.innerHTML = categories.map(c => {
-    const items = inventory.filter(i => i.type === c.key);
+    const items = sheetInv.filter(i => i.type === c.key);
     const totalQty = items.reduce((s,i) => s + Math.max(0, qtyTotal(i.entries)), 0);
     const outOfStock = items.filter(i => qtyTotal(i.entries) <= 0).length;
     const active = filterType === c.key;
+    if(items.length === 0) return ''; // hide empty categories for this sheet
     return `<div class="summary-card ${c.cls} ${active?'active':''}" onclick="toggleFilter('${c.key}')">
       <div class="label">${c.label}</div>
       <div class="count">${totalQty}</div>
@@ -1346,7 +1513,8 @@ function getFiltered() {
   searchQ = document.getElementById('searchInput').value.toLowerCase();
   filterType = document.getElementById('typeFilter').value;
   filterStock = document.getElementById('stockFilter').value;
-  let list = [...inventory];
+  // Start with sheet-filtered inventory
+  let list = getSheetInventory();
   if(filterType) list = list.filter(i => i.type === filterType);
   if(filterStock === 'zero') list = list.filter(i => qtyTotal(i.entries) <= 0);
   else if(filterStock === 'instock') list = list.filter(i => qtyTotal(i.entries) > 0);
@@ -1376,10 +1544,14 @@ function renderTable() {
     empty.style.display = 'block';
   } else {
     empty.style.display = 'none';
-    tbody.innerHTML = list.map(item => {
+    tbody.innerHTML = list.map((item, seqIdx) => {
       const idx = inventory.indexOf(item);
+      const displayNo = seqIdx + 1; // sequential numbering per sheet
+      const originTag = activeSheet === 'oos'
+        ? `<span style="font-size:0.6rem;color:${COMPANY_USED_ITEMS.has(item.no)?'#2a6a48':'var(--gold)'};margin-left:4px">${COMPANY_USED_ITEMS.has(item.no)?'CO':'PR'}</span>`
+        : '';
       return `<tr>
-        <td style="color:var(--muted);font-size:0.78rem">${item.no}</td>
+        <td style="color:var(--muted);font-size:0.78rem">${displayNo}${originTag}</td>
         <td class="type-cell"><span class="type-pill ${pillClass[item.type]||''}">${item.type}</span></td>
         <td class="item-name">${item.item}</td>
         <td class="qty-cell ${qtyClass(item.entries)}">${fmtQtyEntries(item.entries)}</td>
@@ -1392,13 +1564,15 @@ function renderTable() {
       </tr>`;
     }).join('');
   }
-  const totalQty = inventory.reduce((s,i) => s + Math.max(0, qtyTotal(i.entries)), 0);
-  const totalValue = inventory.filter(i=>i.price&&qtyTotal(i.entries)>0).reduce((s,i)=>s+i.price*qtyTotal(i.entries),0);
-  document.getElementById('countBadge').textContent = `${list.length} of ${inventory.length} items`;
+  const sheetInv = getSheetInventory();
+  const totalQty = sheetInv.reduce((s,i) => s + Math.max(0, qtyTotal(i.entries)), 0);
+  const totalValue = sheetInv.filter(i=>i.price&&qtyTotal(i.entries)>0).reduce((s,i)=>s+i.price*qtyTotal(i.entries),0);
+  document.getElementById('countBadge').textContent = `${list.length} of ${sheetInv.length} items`;
+  const sheetLabel = activeSheet === 'company' ? '🏢 Company Used' : activeSheet === 'oos' ? '📦 Out of Stock' : '🍷 Personal';
   document.getElementById('footerStats').innerHTML = `
-    <span>Total items: <strong>${inventory.length}</strong></span>
+    <span>${sheetLabel}: <strong>${sheetInv.length}</strong> items</span>
     <span>Total bottles: <strong>${Number.isInteger(totalQty) ? totalQty : totalQty.toFixed(2)}</strong></span>
-    <span>Out of stock: <strong style="color:var(--danger)">${inventory.filter(i=>qtyTotal(i.entries)<=0).length}</strong></span>
+    <span>Out of stock: <strong style="color:var(--danger)">${sheetInv.filter(i=>qtyTotal(i.entries)<=0).length}</strong></span>
     ${totalValue ? `<span>Est. value (priced items): <strong>IDR ${totalValue.toLocaleString('id-ID')}</strong></span>` : ''}
     <span style="margin-left:auto;font-size:0.7rem">Last updated: ${new Date().toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'})}</span>
   `;
@@ -1530,14 +1704,16 @@ function deleteItem(idx) {
 
 // ─── EXPORT ──────────────────────────────────────────────────────────────────
 function exportCSV() {
-  const headers = ['No','Type','Item','Qty','Price/Bottle (IDR)','Remarks'];
-  const rows = inventory.map(i => [i.no, i.type, `"${i.item}"`, qtyTotal(i.entries), i.price||'', `"${i.remarks||''}"`]);
+  const sheetInv = getSheetInventory();
+  const sheetName = activeSheet === 'company' ? 'Company_Used' : activeSheet === 'oos' ? 'Out_of_Stock' : 'Personal';
+  const headers = ['No','Type','Item','Qty','Price/Bottle (IDR)','Remarks','Sheet'];
+  const rows = sheetInv.map((i, idx) => [idx + 1, i.type, `"${i.item}"`, qtyTotal(i.entries), i.price||'', `"${i.remarks||''}"`, sheetName]);
   const csv = [headers, ...rows].map(r => r.join(',')).join('\n');
   const a = document.createElement('a');
   a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv);
-  a.download = `GP_Liquor_Inventory_${new Date().toISOString().split('T')[0]}.csv`;
+  a.download = `GP_Liquor_${sheetName}_${new Date().toISOString().split('T')[0]}.csv`;
   a.click();
-  showToast('CSV exported');
+  showToast(`CSV exported (${sheetName})`);
 }
 
 // ─── PDF EXPORT ──────────────────────────────────────────────────────────────
@@ -1934,6 +2110,7 @@ document.getElementById('typeFilter').addEventListener('change', () => {
   renderTable();
 });
 renderQtyEntries();
+updateSheetBadges();
 renderSummary();
 renderTable();
 
