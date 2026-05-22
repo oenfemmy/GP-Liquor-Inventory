@@ -1342,12 +1342,14 @@
     "item": "Hibiki Suntori 21yo",
     "price": null,
     "remarks": "14/4/2026 Pak KT Purchase",
-    "movements": [],
-    "entries": [
+    "movements": [
       {
-        "value": 1,
-        "note": ""
-      },
+        "date": "2026-05-22",
+        "change": -1,
+        "note": "21/5 Dinner with ash & abd"
+      }
+    ],
+    "entries": [
       {
         "value": 1,
         "note": ""
