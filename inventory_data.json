@@ -868,13 +868,14 @@
     "item": "Dom Perignon Vintage Rose Edition 2005",
     "price": null,
     "remarks": "",
-    "movements": [],
-    "entries": [
+    "movements": [
       {
-        "value": 1,
-        "note": ""
+        "date": "2026-06-08",
+        "change": -1,
+        "note": "8/6 Farewell Yamamoto san"
       }
-    ]
+    ],
+    "entries": []
   },
   {
     "no": 48,
