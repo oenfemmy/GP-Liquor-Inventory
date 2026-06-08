@@ -897,16 +897,14 @@
     "item": "Barons de Rothschild Blanc de Blancs Champagne",
     "price": null,
     "remarks": "",
-    "movements": [],
+    "movements": [
+      {
+        "date": "2026-06-08",
+        "change": -2,
+        "note": "8/6 Farewell Yamamoto san"
+      }
+    ],
     "entries": [
-      {
-        "value": 1,
-        "note": ""
-      },
-      {
-        "value": 1,
-        "note": ""
-      },
       {
         "value": 1,
         "note": ""
