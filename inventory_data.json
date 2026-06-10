@@ -182,14 +182,14 @@
         "date": "2025-04-01",
         "change": 1,
         "note": "April return"
+      },
+      {
+        "date": "2026-06-10",
+        "change": -1,
+        "note": "10/6 meeting at GP office"
       }
     ],
-    "entries": [
-      {
-        "value": 1,
-        "note": ""
-      }
-    ]
+    "entries": []
   },
   {
     "no": 13,
