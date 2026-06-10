@@ -957,20 +957,14 @@
     "item": "Kweichow Moutai 53%",
     "price": null,
     "remarks": "",
-    "movements": [],
+    "movements": [
+      {
+        "date": "2026-06-10",
+        "change": -3,
+        "note": "9/6 Dinner with Sinoma"
+      }
+    ],
     "entries": [
-      {
-        "value": 1,
-        "note": ""
-      },
-      {
-        "value": 1,
-        "note": ""
-      },
-      {
-        "value": 1,
-        "note": ""
-      },
       {
         "value": 1,
         "note": ""
