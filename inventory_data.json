@@ -20,13 +20,14 @@
     "item": "2001, Musigny Grand Cru Faiveley",
     "price": null,
     "remarks": "From Pakubuwono",
-    "movements": [],
-    "entries": [
+    "movements": [
       {
-        "value": 1,
-        "note": ""
+        "date": "2026-06-10",
+        "change": -1,
+        "note": "10/6 Dinner with Abd & ash"
       }
-    ]
+    ],
+    "entries": []
   },
   {
     "no": 3,
