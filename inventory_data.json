@@ -5,13 +5,14 @@
     "item": "1999, Bonnes Mares Grand Cru Domaine G Roumier",
     "price": null,
     "remarks": "From Pakubuwono",
-    "movements": [],
-    "entries": [
+    "movements": [
       {
-        "value": 1,
-        "note": ""
+        "date": "2026-06-10",
+        "change": -1,
+        "note": "10/6 Dinner with Abd & ash"
       }
-    ]
+    ],
+    "entries": []
   },
   {
     "no": 2,
