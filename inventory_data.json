@@ -1128,6 +1128,10 @@
       {
         "value": 1,
         "note": ""
+      },
+      {
+        "value": 0.5,
+        "note": "half bottle"
       }
     ]
   },
