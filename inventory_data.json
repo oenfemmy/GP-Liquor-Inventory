@@ -274,21 +274,14 @@
         "date": "2026-08-18",
         "change": 12,
         "note": "refill"
+      },
+      {
+        "date": "2026-08-19",
+        "change": -3,
+        "note": "18/8 Dinner with Abd & Ash"
       }
     ],
     "entries": [
-      {
-        "value": 1,
-        "note": ""
-      },
-      {
-        "value": 1,
-        "note": ""
-      },
-      {
-        "value": 1,
-        "note": ""
-      },
       {
         "value": 1,
         "note": ""
