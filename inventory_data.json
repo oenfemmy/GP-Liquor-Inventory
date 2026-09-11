@@ -1380,5 +1380,14 @@
         "note": ""
       }
     ]
+  },
+  {
+    "no": 71,
+    "type": "Red Wine",
+    "item": "2022 Alaris Trapiche Merlot Argentina",
+    "entries": [],
+    "price": 925000,
+    "remarks": "buy at Kahyangan Restaurant",
+    "movements": []
   }
 ]
