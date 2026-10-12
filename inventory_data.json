@@ -428,21 +428,14 @@
     "item": "2020, Bouchard Pere et Fils Mersault Genevrieres",
     "price": 1980000,
     "remarks": "",
-    "movements": [],
-    "entries": [
+    "movements": [
       {
-        "value": 1,
-        "note": ""
-      },
-      {
-        "value": 1,
-        "note": ""
-      },
-      {
-        "value": 1,
-        "note": ""
+        "date": "2026-10-12",
+        "change": -3,
+        "note": "10/10 Pak DT Birthday"
       }
-    ]
+    ],
+    "entries": []
   },
   {
     "no": 21,
